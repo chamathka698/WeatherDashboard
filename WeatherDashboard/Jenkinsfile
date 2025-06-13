@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+        BUILD_CONFIGURATION = 'Release'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Restore') {
+            steps {
+                sh 'dotnet restore WeatherDashboard.sln'
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh 'dotnet build WeatherDashboard.sln --configuration ${BUILD_CONFIGURATION} --no-restore'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh 'dotnet test WeatherDashboard.sln --configuration ${BUILD_CONFIGURATION} --no-build --logger "trx;LogFileName=test-results.trx"'
+            }
+            post {
+                always {
+                    xunit(testResultMargin: '5', thresholdMode: 'number', thresholds: [[$class: 'FailedThreshold', failedThreshold: '0']], tools: [MSTest(deleteOutputFiles: true, failIfNotNew: true, pattern: '**/TestResults/*.trx', skipNoTestFiles: false, stopProcessingIfError: true)])
+                }
+            }
+        }
+        
+        stage('Publish') {
+            steps {
+                sh 'dotnet publish WeatherDashboard/WeatherDashboard.csproj --configuration ${BUILD_CONFIGURATION} --no-build --output ./publish'
+            }
+        }
+        
+        stage('Archive') {
+            steps {
+                archiveArtifacts artifacts: '**/publish/**', fingerprint: true
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
